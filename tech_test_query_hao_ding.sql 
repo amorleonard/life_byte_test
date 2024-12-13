@@ -1,0 +1,49 @@
+WITH date_range AS (
+    -- Generate all dates between June 1, 2020, and September 30, 2020
+    SELECT generate_series('2020-06-01'::date, '2020-09-30'::date, '1 day'::interval)::date AS dt_report
+),
+filtered_users AS (
+    -- Filter enabled users from the users table
+    SELECT login_hash,currency
+    FROM users
+    WHERE enable = 1
+),
+trade_data AS (
+    -- Join trades with filtered users and filter dates
+    SELECT 
+        dr.dt_report,
+        t.login_hash,
+        t.server_hash,
+        t.symbol,
+        u.currency,
+        t.volume,
+        t.close_time,
+        t.open_time
+    FROM trades t
+    JOIN filtered_users u ON t.login_hash = u.login_hash
+    CROSS JOIN date_range dr
+    WHERE t.close_time::date <= dr.dt_report
+      AND t.open_time::date <= dr.dt_report
+),
+aggregated_data AS (
+    -- Aggregate the required fields
+    SELECT 
+        td.dt_report,
+        td.login_hash,
+        td.server_hash,
+        td.symbol,
+        td.currency,
+        SUM(CASE WHEN td.dt_report - td.close_time::date <= 7 THEN td.volume ELSE 0 END) AS sum_volume_prev_7d,
+        SUM(td.volume) AS sum_volume_prev_all,
+        DENSE_RANK() OVER (PARTITION BY td.dt_report, td.symbol ORDER BY SUM(CASE WHEN td.dt_report - td.close_time::date <= 7 THEN td.volume ELSE 0 END) DESC) AS rank_volume_symbol_prev_7d,
+        DENSE_RANK() OVER (PARTITION BY td.dt_report ORDER BY COUNT(*) DESC) AS rank_count_prev_7d,
+        SUM(CASE WHEN EXTRACT(MONTH FROM td.dt_report) = 8 AND EXTRACT(YEAR FROM td.dt_report) = 2020 THEN td.volume ELSE 0 END) AS sum_volume_2020_08,
+        MIN(td.open_time) AS date_first_trade,
+        ROW_NUMBER() OVER (PARTITION BY td.dt_report, td.login_hash, td.server_hash, td.symbol ORDER BY td.close_time DESC) AS row_number
+    FROM trade_data td
+    GROUP BY td.dt_report, td.login_hash, td.server_hash, td.symbol, td.currency
+)
+-- Select final results in the required order
+SELECT *
+FROM aggregated_data
+ORDER BY row_number DESC;
