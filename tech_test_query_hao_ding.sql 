@@ -39,7 +39,7 @@ aggregated_data AS (
         DENSE_RANK() OVER (PARTITION BY td.dt_report ORDER BY COUNT(*) DESC) AS rank_count_prev_7d,
         SUM(CASE WHEN EXTRACT(MONTH FROM td.dt_report) = 8 AND EXTRACT(YEAR FROM td.dt_report) = 2020 THEN td.volume ELSE 0 END) AS sum_volume_2020_08,
         MIN(td.open_time) AS date_first_trade,
-        ROW_NUMBER() OVER (PARTITION BY td.dt_report, td.login_hash, td.server_hash, td.symbol ORDER BY td.close_time DESC) AS row_number
+        ROW_NUMBER() OVER (PARTITION BY td.dt_report, td.login_hash, td.server_hash, td.symbol ORDER BY td.dt_report DESC) AS row_number
     FROM trade_data td
     GROUP BY td.dt_report, td.login_hash, td.server_hash, td.symbol, td.currency
 )
